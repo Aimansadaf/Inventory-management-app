@@ -99,7 +99,7 @@ export default function ProductForm() {
 
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-2">
-            <Label htmlFor="price">Price ($) *</Label>
+            <Label htmlFor="price">Price (₹) *</Label>
             <Input id="price" type="number" step="0.01" min="0" value={form.price} onChange={e => setForm(f => ({ ...f, price: e.target.value }))} placeholder="0.00" required />
           </div>
           <div className="space-y-2">
