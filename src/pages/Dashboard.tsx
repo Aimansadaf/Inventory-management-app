@@ -95,7 +95,7 @@ export default function Dashboard() {
                         {p.stock} left
                       </span>
                     </td>
-                    <td className="p-3 text-right font-mono">${getFinalPrice(p.price, p.discount).toFixed(2)}</td>
+                    <td className="p-3 text-right font-mono">₹{getFinalPrice(p.price, p.discount).toFixed(2)}</td>
                   </tr>
                 ))}
               </tbody>

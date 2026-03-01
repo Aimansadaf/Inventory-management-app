@@ -98,7 +98,7 @@ export default function ScanPage() {
               </div>
               <div>
                 <span className="text-muted-foreground">Original Price</span>
-                <p className="font-mono font-medium">${product.price.toFixed(2)}</p>
+                <p className="font-mono font-medium">₹{product.price.toFixed(2)}</p>
               </div>
               <div>
                 <span className="text-muted-foreground">Discount</span>
@@ -110,7 +110,7 @@ export default function ScanPage() {
               </div>
               <div>
                 <span className="text-muted-foreground">Final Price</span>
-                <p className="font-mono font-bold text-primary">${getFinalPrice(product.price, product.discount).toFixed(2)}</p>
+                <p className="font-mono font-bold text-primary">₹{getFinalPrice(product.price, product.discount).toFixed(2)}</p>
               </div>
               <div className="col-span-2">
                 <span className="text-muted-foreground">Stock Remaining</span>

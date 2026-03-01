@@ -91,7 +91,7 @@ export default function Products() {
                   <tr key={p.id} className="border-t hover:bg-muted/50 transition-colors">
                     <td className="p-3 font-medium">{p.name}</td>
                     <td className="p-3 text-muted-foreground">{p.category}</td>
-                    <td className="p-3 text-right font-mono">${p.price.toFixed(2)}</td>
+                    <td className="p-3 text-right font-mono">₹{p.price.toFixed(2)}</td>
                     <td className="p-3 text-right">
                       {p.stock < 5 ? (
                         <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-destructive/10 text-destructive">
@@ -106,7 +106,7 @@ export default function Products() {
                         </span>
                       ) : "—"}
                     </td>
-                    <td className="p-3 text-right font-mono font-medium">${getFinalPrice(p.price, p.discount).toFixed(2)}</td>
+                    <td className="p-3 text-right font-mono font-medium">₹{getFinalPrice(p.price, p.discount).toFixed(2)}</td>
                     <td className="p-3 text-right">
                       <div className="flex items-center justify-end gap-1">
                         <Button variant="ghost" size="icon" asChild>
