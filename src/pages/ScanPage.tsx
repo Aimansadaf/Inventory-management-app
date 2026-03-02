@@ -35,55 +35,78 @@ export default function ScanPage() {
     setError(null);
     setProduct(null);
     setScanning(true);
+  }, []);
 
-    try {
-      const reader = new BrowserMultiFormatReader();
-      const controls = await reader.decodeFromConstraints(
-        {
-          video: {
-            facingMode: "environment",
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
+  // Start camera only after video element is visible in DOM
+  useEffect(() => {
+    if (!scanning || !videoRef.current) return;
+
+    let cancelled = false;
+
+    const initCamera = async () => {
+      try {
+        const reader = new BrowserMultiFormatReader();
+        const controls = await reader.decodeFromConstraints(
+          {
+            video: {
+              facingMode: "environment",
+              width: { ideal: 1280 },
+              height: { ideal: 720 },
+            },
           },
-        },
-        videoRef.current!,
-        async (result, err, ctrls) => {
-          // Callback fires continuously. NotFoundException means no barcode in frame — ignore it.
-          if (err && !(err instanceof NotFoundException)) {
-            console.warn("Scan frame error:", err);
-            return;
-          }
+          videoRef.current!,
+          async (result, err, ctrls) => {
+            if (cancelled) return;
+            if (err && !(err instanceof NotFoundException)) {
+              console.warn("Scan frame error:", err);
+              return;
+            }
 
-          if (result) {
-            const scannedId = result.getText();
-            console.log("Barcode detected:", scannedId);
-            ctrls.stop();
-            controlsRef.current = null;
-            setScanning(false);
-            setLoading(true);
+            if (result) {
+              const scannedId = result.getText();
+              console.log("Barcode detected:", scannedId);
+              ctrls.stop();
+              controlsRef.current = null;
+              setScanning(false);
+              setLoading(true);
 
-            const { data, error: dbError } = await supabase
-              .from("products")
-              .select("*")
-              .eq("id", scannedId)
-              .single();
+              const { data, error: dbError } = await supabase
+                .from("products")
+                .select("*")
+                .eq("id", scannedId)
+                .single();
 
-            setLoading(false);
-            if (dbError || !data) {
-              setError("Product not found. Please try again");
-            } else {
-              setProduct(data);
+              setLoading(false);
+              if (dbError || !data) {
+                setError("Product not found. Please try again");
+              } else {
+                setProduct(data);
+              }
             }
           }
+        );
+        if (!cancelled) {
+          controlsRef.current = controls;
+        } else {
+          controls.stop();
         }
-      );
-      controlsRef.current = controls;
-    } catch (e) {
-      console.error("Camera error:", e);
-      setError("Could not access camera. Please allow camera permissions.");
-      setScanning(false);
-    }
-  }, []);
+      } catch (e) {
+        console.error("Camera error:", e);
+        if (!cancelled) {
+          setError("Camera not available. Please check permissions.");
+          setScanning(false);
+        }
+      }
+    };
+
+    initCamera();
+
+    return () => {
+      cancelled = true;
+      controlsRef.current?.stop();
+      controlsRef.current = null;
+    };
+  }, [scanning]);
 
   const stopScan = () => {
     controlsRef.current?.stop();
@@ -145,14 +168,12 @@ export default function ScanPage() {
               </Button>
             </div>
             <div className="rounded-lg border overflow-hidden bg-black aspect-video relative">
-              <video ref={videoRef} className="w-full h-full object-cover" />
+              <video ref={videoRef} className="w-full h-full object-cover" autoPlay playsInline muted />
               <ScanOverlay />
             </div>
           </>
         )}
 
-        {/* Hidden video for ref when not visible */}
-        {!scanning && <video ref={videoRef} className="hidden" />}
 
         {loading && (
           <div className="flex items-center justify-center gap-2 h-32 bg-muted rounded-lg">
