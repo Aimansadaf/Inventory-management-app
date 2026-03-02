@@ -1,118 +1,91 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import { BrowserMultiFormatReader, type IScannerControls } from "@zxing/browser";
-import { NotFoundException } from "@zxing/library";
+import { Html5Qrcode, Html5QrcodeSupportedFormats } from "html5-qrcode";
 import { supabase, Product, getFinalPrice } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import { Camera, CameraOff, ShoppingCart, RotateCcw, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
-function ScanOverlay() {
-  return (
-    <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-      <div className="w-64 h-40 relative">
-        {/* Red rectangle corners */}
-        <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-destructive rounded-tl" />
-        <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-destructive rounded-tr" />
-        <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-destructive rounded-bl" />
-        <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-destructive rounded-br" />
-        {/* Scan line animation */}
-        <div className="absolute left-2 right-2 top-1/2 h-0.5 bg-destructive/60 animate-pulse" />
-      </div>
-    </div>
-  );
-}
-
 export default function ScanPage() {
-  const videoRef = useRef<HTMLVideoElement>(null);
+  const scannerRef = useRef<Html5Qrcode | null>(null);
   const [scanning, setScanning] = useState(false);
   const [product, setProduct] = useState<Product | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [selling, setSelling] = useState(false);
-  const controlsRef = useRef<IScannerControls | null>(null);
 
-  const startScan = useCallback(async () => {
+  const stopScanner = useCallback(async () => {
+    try {
+      if (scannerRef.current?.isScanning) {
+        await scannerRef.current.stop();
+      }
+    } catch (e) {
+      console.warn("Stop error:", e);
+    }
+    setScanning(false);
+  }, []);
+
+  const lookupProduct = useCallback(async (scannedId: string) => {
+    setLoading(true);
+    const { data, error: dbError } = await supabase
+      .from("products")
+      .select("*")
+      .eq("id", scannedId)
+      .single();
+
+    setLoading(false);
+    if (dbError || !data) {
+      setError("Product not found. Please try again");
+    } else {
+      setProduct(data);
+    }
+  }, []);
+
+  const startScanner = useCallback(async () => {
     setError(null);
     setProduct(null);
     setScanning(true);
-  }, []);
 
-  // Start camera only after video element is visible in DOM
-  useEffect(() => {
-    if (!scanning || !videoRef.current) return;
+    // Small delay to ensure the DOM element is rendered
+    await new Promise((r) => setTimeout(r, 100));
 
-    let cancelled = false;
+    if (!scannerRef.current) {
+      scannerRef.current = new Html5Qrcode("reader", {
+        formatsToSupport: [
+          Html5QrcodeSupportedFormats.QR_CODE,
+          Html5QrcodeSupportedFormats.CODE_128,
+          Html5QrcodeSupportedFormats.EAN_13,
+          Html5QrcodeSupportedFormats.EAN_8,
+          Html5QrcodeSupportedFormats.UPC_A,
+          Html5QrcodeSupportedFormats.UPC_E,
+          Html5QrcodeSupportedFormats.CODE_39,
+        ],
+        verbose: false,
+      });
+    }
 
-    const initCamera = async () => {
-      try {
-        const reader = new BrowserMultiFormatReader();
-        const controls = await reader.decodeFromConstraints(
-          {
-            video: {
-              facingMode: "environment",
-              width: { ideal: 1280 },
-              height: { ideal: 720 },
-            },
-          },
-          videoRef.current!,
-          async (result, err, ctrls) => {
-            if (cancelled) return;
-            if (err && !(err instanceof NotFoundException)) {
-              console.warn("Scan frame error:", err);
-              return;
-            }
-
-            if (result) {
-              const scannedId = result.getText();
-              console.log("Barcode detected:", scannedId);
-              ctrls.stop();
-              controlsRef.current = null;
-              setScanning(false);
-              setLoading(true);
-
-              const { data, error: dbError } = await supabase
-                .from("products")
-                .select("*")
-                .eq("id", scannedId)
-                .single();
-
-              setLoading(false);
-              if (dbError || !data) {
-                setError("Product not found. Please try again");
-              } else {
-                setProduct(data);
-              }
-            }
-          }
-        );
-        if (!cancelled) {
-          controlsRef.current = controls;
-        } else {
-          controls.stop();
+    try {
+      await scannerRef.current.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: { width: 250, height: 250 }, aspectRatio: 1.0 },
+        async (decodedText) => {
+          console.log("Barcode detected:", decodedText);
+          await stopScanner();
+          await lookupProduct(decodedText);
+        },
+        () => {
+          // Ignore scan failures (no barcode in frame)
         }
-      } catch (e) {
-        console.error("Camera error:", e);
-        if (!cancelled) {
-          setError("Camera not available. Please check permissions.");
-          setScanning(false);
-        }
-      }
-    };
-
-    initCamera();
-
-    return () => {
-      cancelled = true;
-      controlsRef.current?.stop();
-      controlsRef.current = null;
-    };
-  }, [scanning]);
-
-  const stopScan = () => {
-    controlsRef.current?.stop();
-    controlsRef.current = null;
-    setScanning(false);
-  };
+      );
+    } catch (e: any) {
+      console.error("Camera error:", e);
+      const msg =
+        e?.toString?.().includes("NotAllowedError")
+          ? "Please allow camera access to scan barcodes"
+          : "Camera not available. Please check permissions.";
+      setError(msg);
+      setScanning(false);
+    }
+  }, [stopScanner, lookupProduct]);
 
   const handleSell = async () => {
     if (!product || product.stock <= 0) return;
@@ -135,12 +108,14 @@ export default function ScanPage() {
   const handleScanAgain = () => {
     setProduct(null);
     setError(null);
-    startScan();
+    startScanner();
   };
 
   useEffect(() => {
     return () => {
-      controlsRef.current?.stop();
+      if (scannerRef.current?.isScanning) {
+        scannerRef.current.stop().catch(() => {});
+      }
     };
   }, []);
 
@@ -152,7 +127,7 @@ export default function ScanPage() {
 
       <div className="space-y-4">
         {!scanning && !product && !loading && (
-          <Button onClick={startScan}>
+          <Button onClick={startScanner}>
             <Camera className="h-4 w-4 mr-2" />Start Scanning
           </Button>
         )}
@@ -163,17 +138,15 @@ export default function ScanPage() {
               <p className="text-sm text-destructive font-semibold animate-pulse">
                 📷 Point camera at barcode
               </p>
-              <Button variant="outline" size="sm" onClick={stopScan}>
+              <Button variant="outline" size="sm" onClick={stopScanner}>
                 <CameraOff className="h-4 w-4 mr-2" />Stop
               </Button>
             </div>
-            <div className="rounded-lg border overflow-hidden bg-black aspect-video relative">
-              <video ref={videoRef} className="w-full h-full object-cover" autoPlay playsInline muted />
-              <ScanOverlay />
+            <div className="rounded-lg border overflow-hidden bg-black">
+              <div id="reader" className="w-full" />
             </div>
           </>
         )}
-
 
         {loading && (
           <div className="flex items-center justify-center gap-2 h-32 bg-muted rounded-lg">
