@@ -1,9 +1,26 @@
-import { useEffect, useRef, useState } from "react";
-import { BrowserMultiFormatReader } from "@zxing/browser";
+import { useEffect, useRef, useState, useCallback } from "react";
+import { BrowserMultiFormatReader, type IScannerControls } from "@zxing/browser";
+import { NotFoundException } from "@zxing/library";
 import { supabase, Product, getFinalPrice } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import { Camera, CameraOff, ShoppingCart, RotateCcw, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+
+function ScanOverlay() {
+  return (
+    <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
+      <div className="w-64 h-40 relative">
+        {/* Red rectangle corners */}
+        <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-destructive rounded-tl" />
+        <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-destructive rounded-tr" />
+        <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-destructive rounded-bl" />
+        <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-destructive rounded-br" />
+        {/* Scan line animation */}
+        <div className="absolute left-2 right-2 top-1/2 h-0.5 bg-destructive/60 animate-pulse" />
+      </div>
+    </div>
+  );
+}
 
 export default function ScanPage() {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -12,22 +29,36 @@ export default function ScanPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [selling, setSelling] = useState(false);
-  const controlsRef = useRef<{ stop: () => void } | null>(null);
+  const controlsRef = useRef<IScannerControls | null>(null);
 
-  const startScan = async () => {
+  const startScan = useCallback(async () => {
     setError(null);
     setProduct(null);
     setScanning(true);
 
     try {
       const reader = new BrowserMultiFormatReader();
-      const controls = await reader.decodeFromVideoDevice(
-        undefined,
+      const controls = await reader.decodeFromConstraints(
+        {
+          video: {
+            facingMode: "environment",
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
+        },
         videoRef.current!,
-        async (result) => {
+        async (result, err, ctrls) => {
+          // Callback fires continuously. NotFoundException means no barcode in frame — ignore it.
+          if (err && !(err instanceof NotFoundException)) {
+            console.warn("Scan frame error:", err);
+            return;
+          }
+
           if (result) {
             const scannedId = result.getText();
-            controlsRef.current?.stop();
+            console.log("Barcode detected:", scannedId);
+            ctrls.stop();
+            controlsRef.current = null;
             setScanning(false);
             setLoading(true);
 
@@ -47,14 +78,16 @@ export default function ScanPage() {
         }
       );
       controlsRef.current = controls;
-    } catch {
+    } catch (e) {
+      console.error("Camera error:", e);
       setError("Could not access camera. Please allow camera permissions.");
       setScanning(false);
     }
-  };
+  }, []);
 
   const stopScan = () => {
     controlsRef.current?.stop();
+    controlsRef.current = null;
     setScanning(false);
   };
 
@@ -104,13 +137,16 @@ export default function ScanPage() {
         {scanning && (
           <>
             <div className="flex items-center justify-between">
-              <p className="text-sm text-muted-foreground font-medium">Point camera at barcode to scan</p>
+              <p className="text-sm text-destructive font-semibold animate-pulse">
+                📷 Point camera at barcode
+              </p>
               <Button variant="outline" size="sm" onClick={stopScan}>
                 <CameraOff className="h-4 w-4 mr-2" />Stop
               </Button>
             </div>
-            <div className="rounded-lg border overflow-hidden bg-black aspect-video">
+            <div className="rounded-lg border overflow-hidden bg-black aspect-video relative">
               <video ref={videoRef} className="w-full h-full object-cover" />
+              <ScanOverlay />
             </div>
           </>
         )}
