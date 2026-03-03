@@ -22,6 +22,7 @@ export type Database = {
           id: string
           name: string
           price: number | null
+          sku: string | null
           stock: number | null
         }
         Insert: {
@@ -31,6 +32,7 @@ export type Database = {
           id?: string
           name: string
           price?: number | null
+          sku?: string | null
           stock?: number | null
         }
         Update: {
@@ -40,6 +42,7 @@ export type Database = {
           id?: string
           name?: string
           price?: number | null
+          sku?: string | null
           stock?: number | null
         }
         Relationships: []
