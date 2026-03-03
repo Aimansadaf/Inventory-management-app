@@ -10,19 +10,21 @@ export default function BarcodePage() {
   const [selectedId, setSelectedId] = useState("");
   const svgRef = useRef<SVGSVGElement>(null);
 
+  const selectedProduct = products?.find(p => p.id === selectedId);
+
   useEffect(() => {
-    if (selectedId && svgRef.current) {
-      JsBarcode(svgRef.current, selectedId, {
+    if (selectedProduct?.sku && svgRef.current) {
+      JsBarcode(svgRef.current, selectedProduct.sku, {
         format: "CODE128",
-        width: 2,
-        height: 80,
+        width: 3,
+        height: 100,
         displayValue: true,
-        fontSize: 12,
+        fontSize: 18,
         font: "JetBrains Mono",
-        margin: 10,
+        margin: 20,
       });
     }
-  }, [selectedId]);
+  }, [selectedProduct?.sku]);
 
   const handlePrint = () => {
     const svg = svgRef.current;
@@ -30,7 +32,7 @@ export default function BarcodePage() {
     const svgData = new XMLSerializer().serializeToString(svg);
     const win = window.open("", "_blank");
     if (!win) return;
-    const product = products?.find(p => p.id === selectedId);
+    const product = selectedProduct;
     win.document.write(`
       <html><head><title>Barcode - ${product?.name ?? ""}</title>
       <style>body{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;font-family:sans-serif;}
@@ -58,7 +60,7 @@ export default function BarcodePage() {
             <Select value={selectedId} onValueChange={setSelectedId}>
               <SelectTrigger><SelectValue placeholder="Choose a product..." /></SelectTrigger>
               <SelectContent>
-                {products?.map(p => <SelectItem key={p.id} value={p.id}>{p.name} — {p.category}</SelectItem>)}
+                {products?.map(p => <SelectItem key={p.id} value={p.id}>{p.sku} — {p.name}</SelectItem>)}
               </SelectContent>
             </Select>
           )}

@@ -2,6 +2,7 @@ export { supabase } from '@/integrations/supabase/client';
 
 export type Product = {
   id: string;
+  sku: string;
   name: string;
   category: string;
   price: number;

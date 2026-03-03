@@ -34,8 +34,8 @@ export function useProduct(id: string | undefined) {
 export function useCreateProduct() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (product: Omit<Product, 'id' | 'created_at'>) => {
-      const { data, error } = await supabase.from('products').insert(product).select().single();
+    mutationFn: async (product: Partial<Product> & { name: string }) => {
+      const { data, error } = await supabase.from('products').insert(product as any).select().single();
       if (error) throw error;
       return data;
     },
