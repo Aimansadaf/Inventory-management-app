@@ -18,6 +18,7 @@ export default function ProductForm() {
 
   const [form, setForm] = useState({
     name: "",
+    sku: "",
     category: CATEGORIES[0] as string,
     price: "",
     stock: "",
@@ -28,6 +29,7 @@ export default function ProductForm() {
     if (existing) {
       setForm({
         name: existing.name,
+        sku: existing.sku || "",
         category: existing.category,
         price: String(existing.price),
         stock: String(existing.stock),
@@ -38,13 +40,16 @@ export default function ProductForm() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const payload = {
+    const payload: Record<string, any> = {
       name: form.name.trim(),
       category: form.category,
       price: parseFloat(form.price),
       stock: parseInt(form.stock),
       discount: parseFloat(form.discount) || 0,
     };
+    if (form.sku.trim()) {
+      payload.sku = form.sku.trim();
+    }
 
     if (!payload.name || isNaN(payload.price) || isNaN(payload.stock)) {
       toast.error("Please fill in all required fields");
@@ -56,7 +61,7 @@ export default function ProductForm() {
         await updateProduct.mutateAsync({ id, ...payload });
         toast.success("Product updated");
       } else {
-        await createProduct.mutateAsync(payload);
+        await createProduct.mutateAsync(payload as any);
         toast.success("Product created");
       }
       navigate("/products");
@@ -85,6 +90,12 @@ export default function ProductForm() {
         <div className="space-y-2">
           <Label htmlFor="name">Product Name *</Label>
           <Input id="name" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Classic Hoodie" required />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="sku">SKU</Label>
+          <Input id="sku" value={form.sku} onChange={e => setForm(f => ({ ...f, sku: e.target.value }))} placeholder="Auto-generated (e.g. CLT001)" />
+          <p className="text-xs text-muted-foreground">Leave blank to auto-generate</p>
         </div>
 
         <div className="space-y-2">

@@ -72,9 +72,10 @@ export default function Products() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-muted">
-                <tr>
-                  <th className="text-left p-3 font-medium">Name</th>
-                  <th className="text-left p-3 font-medium">Category</th>
+                 <tr>
+                   <th className="text-left p-3 font-medium">SKU</th>
+                   <th className="text-left p-3 font-medium">Name</th>
+                   <th className="text-left p-3 font-medium">Category</th>
                   <th className="text-right p-3 font-medium">Price</th>
                   <th className="text-right p-3 font-medium">Stock</th>
                   <th className="text-right p-3 font-medium">Discount</th>
@@ -85,11 +86,12 @@ export default function Products() {
               <tbody>
                 {filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="p-8 text-center text-muted-foreground">No products found</td>
+                    <td colSpan={8} className="p-8 text-center text-muted-foreground">No products found</td>
                   </tr>
                 ) : filtered.map(p => (
-                  <tr key={p.id} className="border-t hover:bg-muted/50 transition-colors">
-                    <td className="p-3 font-medium">{p.name}</td>
+                   <tr key={p.id} className="border-t hover:bg-muted/50 transition-colors">
+                     <td className="p-3 font-mono text-xs">{p.sku}</td>
+                     <td className="p-3 font-medium">{p.name}</td>
                     <td className="p-3 text-muted-foreground">{p.category}</td>
                     <td className="p-3 text-right font-mono">₹{p.price.toFixed(2)}</td>
                     <td className="p-3 text-right">

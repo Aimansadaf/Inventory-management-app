@@ -29,7 +29,7 @@ export default function ScanPage() {
     const { data, error: dbError } = await supabase
       .from("products")
       .select("*")
-      .eq("id", scannedId)
+      .eq("sku", scannedId)
       .single();
 
     setLoading(false);
