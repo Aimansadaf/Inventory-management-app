@@ -2,7 +2,8 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from "html5-qrcode";
 import { supabase, Product, getFinalPrice } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
-import { Camera, CameraOff, ShoppingCart, RotateCcw, Loader2 } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Camera, CameraOff, ShoppingCart, RotateCcw, Loader2, Search } from "lucide-react";
 import { toast } from "sonner";
 
 export default function ScanPage() {
@@ -12,6 +13,8 @@ export default function ScanPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [selling, setSelling] = useState(false);
+  const [manualSku, setManualSku] = useState("");
+  const [debugInfo, setDebugInfo] = useState<string | null>(null);
 
   const stopScanner = useCallback(async () => {
     try {
@@ -24,18 +27,39 @@ export default function ScanPage() {
     setScanning(false);
   }, []);
 
-  const lookupProduct = useCallback(async (scannedId: string) => {
+  const lookupProduct = useCallback(async (scannedValue: string) => {
+    const trimmed = scannedValue.trim();
+    setDebugInfo(`Searching for SKU: "${trimmed}"`);
     setLoading(true);
+    setError(null);
+    setProduct(null);
+
+    // Try exact SKU match first
     const { data, error: dbError } = await supabase
       .from("products")
       .select("*")
-      .eq("sku", scannedId)
+      .ilike("sku", trimmed)
       .single();
 
     setLoading(false);
+
     if (dbError || !data) {
-      setError("Product not found. Please try again");
+      // Try searching by ID as fallback
+      const { data: dataById } = await supabase
+        .from("products")
+        .select("*")
+        .eq("id", trimmed)
+        .single();
+
+      if (dataById) {
+        setDebugInfo(`Found by ID: "${trimmed}"`);
+        setProduct(dataById);
+      } else {
+        setDebugInfo(`Not found. Searched SKU: "${trimmed}"`);
+        setError(`Product not found for: "${trimmed}". Please check the SKU and try again.`);
+      }
     } else {
+      setDebugInfo(`Found: ${data.name} (SKU: ${data.sku})`);
       setProduct(data);
     }
   }, []);
@@ -43,9 +67,9 @@ export default function ScanPage() {
   const startScanner = useCallback(async () => {
     setError(null);
     setProduct(null);
+    setDebugInfo(null);
     setScanning(true);
 
-    // Small delay to ensure the DOM element is rendered
     await new Promise((r) => setTimeout(r, 100));
 
     if (!scannerRef.current) {
@@ -72,20 +96,22 @@ export default function ScanPage() {
           await stopScanner();
           await lookupProduct(decodedText);
         },
-        () => {
-          // Ignore scan failures (no barcode in frame)
-        }
+        () => {}
       );
     } catch (e: any) {
       console.error("Camera error:", e);
-      const msg =
-        e?.toString?.().includes("NotAllowedError")
-          ? "Please allow camera access to scan barcodes"
-          : "Camera not available. Please check permissions.";
+      const msg = e?.toString?.().includes("NotAllowedError")
+        ? "Please allow camera access to scan barcodes"
+        : "Camera not available. Please check permissions.";
       setError(msg);
       setScanning(false);
     }
   }, [stopScanner, lookupProduct]);
+
+  const handleManualSearch = () => {
+    if (!manualSku.trim()) return;
+    lookupProduct(manualSku.trim());
+  };
 
   const handleSell = async () => {
     if (!product || product.stock <= 0) return;
@@ -108,6 +134,8 @@ export default function ScanPage() {
   const handleScanAgain = () => {
     setProduct(null);
     setError(null);
+    setDebugInfo(null);
+    setManualSku("");
     startScanner();
   };
 
@@ -126,9 +154,39 @@ export default function ScanPage() {
       <h1 className="text-2xl font-bold mb-6">Scan Product</h1>
 
       <div className="space-y-4">
+
+        {/* MANUAL SKU ENTRY */}
+        <div className="rounded-lg border bg-card p-4 space-y-2">
+          <p className="text-sm font-semibold text-muted-foreground">
+            Enter SKU Manually
+          </p>
+          <div className="flex gap-2">
+            <Input
+              placeholder="e.g. CLT001"
+              value={manualSku}
+              onChange={(e) => setManualSku(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleManualSearch()}
+              className="flex-1"
+            />
+            <Button onClick={handleManualSearch} disabled={!manualSku.trim()}>
+              <Search className="h-4 w-4 mr-2" />
+              Search
+            </Button>
+          </div>
+        </div>
+
+        {/* DEBUG INFO */}
+        {debugInfo && (
+          <div className="rounded-lg border bg-muted p-3 text-xs font-mono text-muted-foreground">
+            🔍 {debugInfo}
+          </div>
+        )}
+
+        {/* CAMERA SCANNER */}
         {!scanning && !product && !loading && (
-          <Button onClick={startScanner}>
-            <Camera className="h-4 w-4 mr-2" />Start Scanning
+          <Button onClick={startScanner} variant="outline" className="w-full">
+            <Camera className="h-4 w-4 mr-2" />
+            Start Camera Scanner
           </Button>
         )}
 
@@ -182,6 +240,10 @@ export default function ScanPage() {
                   <p className="font-medium">{product.category}</p>
                 </div>
                 <div>
+                  <span className="text-muted-foreground">SKU</span>
+                  <p className="font-mono font-medium">{product.sku}</p>
+                </div>
+                <div>
                   <span className="text-muted-foreground">Original Price</span>
                   <p className="font-mono font-medium">₹{product.price.toFixed(2)}</p>
                 </div>
@@ -189,13 +251,17 @@ export default function ScanPage() {
                   <div>
                     <span className="text-muted-foreground">Discount</span>
                     <p className="font-medium">
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-primary/10 text-primary">{product.discount}%</span>
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-primary/10 text-primary">
+                        {product.discount}%
+                      </span>
                     </p>
                   </div>
                 )}
                 <div>
                   <span className="text-muted-foreground">Final Price</span>
-                  <p className="font-mono font-bold text-primary">₹{getFinalPrice(product.price, product.discount).toFixed(2)}</p>
+                  <p className="font-mono font-bold text-primary">
+                    ₹{getFinalPrice(product.price, product.discount).toFixed(2)}
+                  </p>
                 </div>
                 <div className="col-span-2">
                   <span className="text-muted-foreground">Stock Remaining</span>
@@ -224,11 +290,12 @@ export default function ScanPage() {
           </>
         )}
 
-        {error && (
+        {error && !product && (
           <Button variant="secondary" onClick={handleScanAgain}>
-            <RotateCcw className="h-4 w-4 mr-2" />Scan Again
+            <RotateCcw className="h-4 w-4 mr-2" />Try Again
           </Button>
         )}
+
       </div>
     </div>
   );
