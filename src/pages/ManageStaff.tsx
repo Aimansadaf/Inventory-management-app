@@ -19,7 +19,7 @@ interface StaffMember {
 }
 
 export default function ManageStaff() {
-  const { user } = useAuth();
+  const { user, session } = useAuth();
   const [staff, setStaff] = useState<StaffMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -63,32 +63,45 @@ export default function ManageStaff() {
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!name || !email || !password) {
+      toast.error("Please fill in all fields");
+      return;
+    }
     setSubmitting(true);
+
     try {
-      // Sign up new user (this does NOT affect the current admin session)
+      // Step 1: Save admin session BEFORE anything else
+      const { data: { session: adminSession } } = await supabase.auth.getSession();
+
+      // Step 2: Sign up new staff
       const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
         email,
         password,
-        options: {
-          data: { full_name: name },
-        },
+        options: { data: { full_name: name } },
       });
 
       if (signUpError) throw signUpError;
       if (!signUpData.user) throw new Error("Failed to create user");
 
-      const newUserId = signUpData.user.id;
-
-      // Insert role (profile is auto-created by the handle_new_user trigger)
+      // Step 3: Insert role
       const { error: roleError } = await supabase
         .from("user_roles")
-        .insert({ user_id: newUserId, role: role as "admin" | "staff" });
+        .insert({ user_id: signUpData.user.id, role: role as "admin" | "staff" });
 
       if (roleError) throw roleError;
 
-      toast.success("Staff member added successfully");
+      // Step 4: Immediately restore admin session
+      if (adminSession) {
+        await supabase.auth.setSession({
+          access_token: adminSession.access_token,
+          refresh_token: adminSession.refresh_token,
+        });
+      }
+
+      toast.success(`${name} added successfully!`);
       setName(""); setEmail(""); setPassword(""); setRole("staff");
       fetchStaff();
+
     } catch (err: any) {
       toast.error("Failed to add staff: " + err.message);
     } finally {
@@ -99,7 +112,6 @@ export default function ManageStaff() {
   const handleDelete = async (id: string, memberName: string) => {
     if (!confirm(`Remove "${memberName}"?`)) return;
     try {
-      // Delete role and profile (can't delete auth user from client, but remove from app)
       await supabase.from("user_roles").delete().eq("user_id", id);
       await supabase.from("profiles").delete().eq("id", id);
       toast.success("Staff member removed");
@@ -177,9 +189,17 @@ export default function ManageStaff() {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={4} className="p-8 text-center text-muted-foreground">Loading...</td></tr>
+              <tr>
+                <td colSpan={4} className="p-8 text-center text-muted-foreground">
+                  Loading...
+                </td>
+              </tr>
             ) : staff.length === 0 ? (
-              <tr><td colSpan={4} className="p-8 text-center text-muted-foreground">No staff members</td></tr>
+              <tr>
+                <td colSpan={4} className="p-8 text-center text-muted-foreground">
+                  No staff members yet. Add your first staff member above.
+                </td>
+              </tr>
             ) : staff.map((s) => (
               <tr key={s.id} className="border-t hover:bg-muted/50 transition-colors">
                 <td className="p-3 font-medium">{s.full_name || "—"}</td>
@@ -203,7 +223,11 @@ export default function ManageStaff() {
                 </td>
                 <td className="p-3 text-right">
                   {s.id !== user?.id && (
-                    <Button variant="ghost" size="icon" onClick={() => handleDelete(s.id, s.full_name || s.email)}>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => handleDelete(s.id, s.full_name || s.email)}
+                    >
                       <Trash2 className="h-4 w-4 text-destructive" />
                     </Button>
                   )}

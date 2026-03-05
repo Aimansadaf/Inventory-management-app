@@ -5,14 +5,9 @@ import { useAuth } from "@/hooks/useAuth";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-  Sidebar,
-  SidebarContent,
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarGroupLabel,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
+  Sidebar, SidebarContent, SidebarGroup,
+  SidebarGroupContent, SidebarGroupLabel,
+  SidebarMenu, SidebarMenuButton, SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar";
 
@@ -27,6 +22,7 @@ const adminItems = [
 
 const staffItems = [
   { title: "Products", url: "/products", icon: Package },
+  { title: "Barcode Generator", url: "/barcode", icon: Barcode },
   { title: "Scan Product", url: "/scan", icon: ScanLine },
 ];
 
@@ -35,7 +31,6 @@ export function AppSidebar() {
   const collapsed = state === "collapsed";
   const location = useLocation();
   const { profile, role, signOut, isAdmin } = useAuth();
-
   const items = isAdmin ? adminItems : staffItems;
 
   return (
@@ -47,7 +42,9 @@ export function AppSidebar() {
               <span className="text-sidebar-primary">▪</span> Inventory
             </h1>
           )}
-          {collapsed && <span className="text-sidebar-primary text-lg font-bold">▪</span>}
+          {collapsed && (
+            <span className="text-sidebar-primary text-lg font-bold">▪</span>
+          )}
         </div>
         <SidebarGroup>
           <SidebarGroupLabel className="text-sidebar-muted text-xs uppercase tracking-wider">
@@ -74,13 +71,14 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {/* User info at bottom */}
         <div className="mt-auto border-t border-sidebar-border p-3">
           {!collapsed ? (
             <div className="space-y-2">
               <div className="flex items-center gap-2">
                 <div className="min-w-0 flex-1">
-                  <p className="text-xs text-sidebar-foreground truncate">{profile?.email || "—"}</p>
+                  <p className="text-xs text-sidebar-foreground truncate">
+                    {profile?.email || "—"}
+                  </p>
                 </div>
                 <Badge
                   variant={isAdmin ? "default" : "secondary"}

@@ -50,7 +50,6 @@ export default function BarcodePage() {
   return (
     <div className="max-w-lg animate-fade-in">
       <h1 className="text-2xl font-bold mb-6">Barcode Generator</h1>
-
       <div className="space-y-4">
         <div className="space-y-2">
           <label className="text-sm font-medium">Select Product</label>
@@ -58,9 +57,15 @@ export default function BarcodePage() {
             <div className="h-10 bg-muted animate-pulse rounded" />
           ) : (
             <Select value={selectedId} onValueChange={setSelectedId}>
-              <SelectTrigger><SelectValue placeholder="Choose a product..." /></SelectTrigger>
+              <SelectTrigger>
+                <SelectValue placeholder="Choose a product..." />
+              </SelectTrigger>
               <SelectContent>
-                {products?.map(p => <SelectItem key={p.id} value={p.id}>{p.sku} — {p.name}</SelectItem>)}
+                {products?.map(p => (
+                  <SelectItem key={p.id} value={p.id}>
+                    {p.sku} — {p.name}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           )}
@@ -69,7 +74,9 @@ export default function BarcodePage() {
         {selectedId && (
           <div className="rounded-lg border bg-card p-6 flex flex-col items-center gap-4 animate-fade-in">
             <svg ref={svgRef} />
-            <Button onClick={handlePrint}><Printer className="h-4 w-4 mr-2" />Print Barcode</Button>
+            <Button onClick={handlePrint}>
+              <Printer className="h-4 w-4 mr-2" />Print Barcode
+            </Button>
           </div>
         )}
       </div>
