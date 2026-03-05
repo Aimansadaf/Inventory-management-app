@@ -5,8 +5,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Camera, CameraOff, ShoppingCart, RotateCcw, Loader2, Search } from "lucide-react";
 import { toast } from "sonner";
+import { useAuth } from "@/hooks/useAuth";
 
 export default function ScanPage() {
+  const { profile } = useAuth();
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const [scanning, setScanning] = useState(false);
   const [product, setProduct] = useState<Product | null>(null);
@@ -117,14 +119,38 @@ export default function ScanPage() {
     if (!product || product.stock <= 0) return;
     setSelling(true);
     const newStock = product.stock - 1;
+    const finalPrice = getFinalPrice(product.price, product.discount);
+
+    // Update stock
     const { error: updateError } = await supabase
       .from("products")
       .update({ stock: newStock })
       .eq("id", product.id);
-    setSelling(false);
 
     if (updateError) {
+      setSelling(false);
       toast.error("Failed to record sale. Please try again.");
+      return;
+    }
+
+    // Record sale
+    const { error: saleError } = await supabase
+      .from("sales")
+      .insert({
+        product_id: product.id,
+        product_name: product.name,
+        sku: product.sku,
+        category: product.category,
+        original_price: product.price,
+        discount: product.discount,
+        final_price: finalPrice,
+        sold_by: profile?.email || "unknown",
+      });
+
+    setSelling(false);
+
+    if (saleError) {
+      toast.error("Stock updated but failed to log sale: " + saleError.message);
     } else {
       setProduct({ ...product, stock: newStock });
       toast.success(`Sale recorded. Stock remaining: ${newStock}`);
@@ -272,7 +298,8 @@ export default function ScanPage() {
 
             <div className="flex gap-3">
               <Button
-                className="flex-1 bg-green-600 hover:bg-green-700 text-white"
+                className="flex-1"
+                variant="default"
                 onClick={handleSell}
                 disabled={!!isOutOfStock || selling}
               >
