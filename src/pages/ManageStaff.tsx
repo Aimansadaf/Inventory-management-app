@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Trash2, UserPlus, Loader2, Shield, User } from "lucide-react";
+import { Trash2, UserPlus, Loader2, Shield } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -28,21 +28,30 @@ export default function ManageStaff() {
   const [password, setPassword] = useState("");
   const [role, setRole] = useState("staff");
 
-  const callEdge = async (body: Record<string, unknown>) => {
-    const { data: { session } } = await supabase.auth.getSession();
-    const res = await supabase.functions.invoke("manage-staff", {
-      body,
-      headers: { Authorization: `Bearer ${session?.access_token}` },
-    });
-    if (res.error) throw new Error(res.error.message);
-    if (res.data?.error) throw new Error(res.data.error);
-    return res.data;
-  };
-
   const fetchStaff = async () => {
     try {
-      const data = await callEdge({ action: "list_staff" });
-      setStaff(data.staff || []);
+      const { data: profiles, error: profilesError } = await supabase
+        .from("profiles")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      if (profilesError) throw profilesError;
+
+      const { data: roles, error: rolesError } = await supabase
+        .from("user_roles")
+        .select("*");
+
+      if (rolesError) throw rolesError;
+
+      const staffList: StaffMember[] = (profiles || []).map((p) => ({
+        id: p.id,
+        email: p.email || "",
+        full_name: p.full_name || "",
+        role: roles?.find((r) => r.user_id === p.id)?.role || "staff",
+        created_at: p.created_at,
+      }));
+
+      setStaff(staffList);
     } catch (err: any) {
       toast.error("Failed to load staff: " + err.message);
     } finally {
@@ -56,18 +65,32 @@ export default function ManageStaff() {
     e.preventDefault();
     setSubmitting(true);
     try {
-      await callEdge({
-        action: "create_staff",
+      // Sign up new user (this does NOT affect the current admin session)
+      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
         email,
         password,
-        full_name: name,
-        role,
+        options: {
+          data: { full_name: name },
+        },
       });
-      toast.success("Staff member added");
+
+      if (signUpError) throw signUpError;
+      if (!signUpData.user) throw new Error("Failed to create user");
+
+      const newUserId = signUpData.user.id;
+
+      // Insert role (profile is auto-created by the handle_new_user trigger)
+      const { error: roleError } = await supabase
+        .from("user_roles")
+        .insert({ user_id: newUserId, role: role as "admin" | "staff" });
+
+      if (roleError) throw roleError;
+
+      toast.success("Staff member added successfully");
       setName(""); setEmail(""); setPassword(""); setRole("staff");
       fetchStaff();
     } catch (err: any) {
-      toast.error(err.message);
+      toast.error("Failed to add staff: " + err.message);
     } finally {
       setSubmitting(false);
     }
@@ -76,7 +99,9 @@ export default function ManageStaff() {
   const handleDelete = async (id: string, memberName: string) => {
     if (!confirm(`Remove "${memberName}"?`)) return;
     try {
-      await callEdge({ action: "delete_staff", user_id: id });
+      // Delete role and profile (can't delete auth user from client, but remove from app)
+      await supabase.from("user_roles").delete().eq("user_id", id);
+      await supabase.from("profiles").delete().eq("id", id);
       toast.success("Staff member removed");
       fetchStaff();
     } catch (err: any) {
@@ -86,7 +111,11 @@ export default function ManageStaff() {
 
   const handleRoleChange = async (userId: string, newRole: string) => {
     try {
-      await callEdge({ action: "update_role", user_id: userId, role: newRole });
+      await supabase.from("user_roles").delete().eq("user_id", userId);
+      const { error } = await supabase
+        .from("user_roles")
+        .insert({ user_id: userId, role: newRole as "admin" | "staff" });
+      if (error) throw error;
       toast.success("Role updated");
       fetchStaff();
     } catch (err: any) {
