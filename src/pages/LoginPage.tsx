@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Loader2 } from "lucide-react";
 
 export default function LoginPage() {
-  const { user, loading, signIn } = useAuth();
+  const { user, loading, signIn, role } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -22,7 +22,9 @@ export default function LoginPage() {
     );
   }
 
-  if (user) return <Navigate to="/" replace />;
+  if (user) {
+    return <Navigate to={role === "staff" ? "/scan" : "/"} replace />;
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
