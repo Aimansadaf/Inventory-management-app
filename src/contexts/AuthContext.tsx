@@ -87,8 +87,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         loading,
         signIn,
         signOut,
-        isAdmin: profile?.role === "admin",
-        isStaff: profile?.role === "staff",
+        isAdmin: false,
+        isStaff: false,
       }}
     >
       {children}

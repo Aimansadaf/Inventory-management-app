@@ -67,6 +67,18 @@ export default function Dashboard() {
 
   useEffect(() => {
     fetchSales();
+
+    // Auto-refresh every 30 seconds
+    const interval = setInterval(fetchSales, 30000);
+
+    // Refresh on window focus
+    const handleFocus = () => fetchSales();
+    window.addEventListener("focus", handleFocus);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("focus", handleFocus);
+    };
   }, []);
 
   const fetchSales = async () => {
