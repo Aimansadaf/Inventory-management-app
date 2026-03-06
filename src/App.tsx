@@ -31,7 +31,7 @@ const App = () => (
               <Route path="/products" element={<Products />} />
               <Route path="/products/new" element={<ProtectedRoute adminOnly><ProductForm /></ProtectedRoute>} />
               <Route path="/products/edit/:id" element={<ProtectedRoute adminOnly><ProductForm /></ProtectedRoute>} />
-              <Route path="/barcode" element={<ProtectedRoute adminOnly><BarcodePage /></ProtectedRoute>} />
+              <Route path="/barcode" element={<BarcodePage />} />
               <Route path="/scan" element={<ScanPage />} />
               <Route path="/staff" element={<ProtectedRoute adminOnly><ManageStaff /></ProtectedRoute>} />
             </Route>

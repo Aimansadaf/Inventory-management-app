@@ -70,10 +70,13 @@ export default function ManageStaff() {
     setSubmitting(true);
 
     try {
-      // Step 1: Save admin session BEFORE anything else
+      // Step 1: Save admin tokens BEFORE anything else
       const { data: { session: adminSession } } = await supabase.auth.getSession();
+      if (!adminSession) throw new Error("No active session");
+      const adminAccessToken = adminSession.access_token;
+      const adminRefreshToken = adminSession.refresh_token;
 
-      // Step 2: Sign up new staff
+      // Step 2: Sign up new staff (this will switch the session)
       const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
         email,
         password,
@@ -83,20 +86,18 @@ export default function ManageStaff() {
       if (signUpError) throw signUpError;
       if (!signUpData.user) throw new Error("Failed to create user");
 
-      // Step 3: Insert role
+      // Step 3: Immediately restore admin session BEFORE any DB calls
+      await supabase.auth.setSession({
+        access_token: adminAccessToken,
+        refresh_token: adminRefreshToken,
+      });
+
+      // Step 4: Insert role (now running as admin again)
       const { error: roleError } = await supabase
         .from("user_roles")
         .insert({ user_id: signUpData.user.id, role: role as "admin" | "staff" });
 
       if (roleError) throw roleError;
-
-      // Step 4: Immediately restore admin session
-      if (adminSession) {
-        await supabase.auth.setSession({
-          access_token: adminSession.access_token,
-          refresh_token: adminSession.refresh_token,
-        });
-      }
 
       toast.success(`${name} added successfully!`);
       setName(""); setEmail(""); setPassword(""); setRole("staff");
