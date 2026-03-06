@@ -6,9 +6,11 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Trash2, UserPlus, Loader2, Shield } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Trash2, UserPlus, Loader2, Shield, Eye, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
+import { useNavigate } from "react-router-dom";
 
 interface StaffMember {
   id: string;
@@ -18,8 +20,17 @@ interface StaffMember {
   created_at: string;
 }
 
+interface PendingStaff {
+  name: string;
+  email: string;
+  password: string;
+  adminAccessToken: string;
+  adminRefreshToken: string;
+}
+
 export default function ManageStaff() {
-  const { user, session } = useAuth();
+  const { user } = useAuth();
+  const navigate = useNavigate();
   const [staff, setStaff] = useState<StaffMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -27,31 +38,25 @@ export default function ManageStaff() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [role, setRole] = useState("staff");
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [pendingStaff, setPendingStaff] = useState<PendingStaff | null>(null);
 
   const fetchStaff = async () => {
     try {
-      const { data: profiles, error: profilesError } = await supabase
-        .from("profiles")
-        .select("*")
-        .order("created_at", { ascending: false });
+      const [profilesRes, rolesRes] = await Promise.all([
+        supabase.from("profiles").select("*").order("created_at", { ascending: false }),
+        supabase.from("user_roles").select("*"),
+      ]);
+      if (profilesRes.error) throw profilesRes.error;
+      if (rolesRes.error) throw rolesRes.error;
 
-      if (profilesError) throw profilesError;
-
-      const { data: roles, error: rolesError } = await supabase
-        .from("user_roles")
-        .select("*");
-
-      if (rolesError) throw rolesError;
-
-      const staffList: StaffMember[] = (profiles || []).map((p) => ({
+      setStaff((profilesRes.data || []).map((p) => ({
         id: p.id,
         email: p.email || "",
         full_name: p.full_name || "",
-        role: roles?.find((r) => r.user_id === p.id)?.role || "staff",
+        role: rolesRes.data?.find((r) => r.user_id === p.id)?.role || "staff",
         created_at: p.created_at,
-      }));
-
-      setStaff(staffList);
+      })));
     } catch (err: any) {
       toast.error("Failed to load staff: " + err.message);
     } finally {
@@ -63,51 +68,67 @@ export default function ManageStaff() {
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || !email || !password) {
-      toast.error("Please fill in all fields");
-      return;
-    }
+    if (!name || !email || !password) { toast.error("Please fill in all fields"); return; }
     setSubmitting(true);
 
     try {
-      // Step 1: Save admin tokens BEFORE anything else
       const { data: { session: adminSession } } = await supabase.auth.getSession();
       if (!adminSession) throw new Error("No active session");
-      const adminAccessToken = adminSession.access_token;
-      const adminRefreshToken = adminSession.refresh_token;
 
-      // Step 2: Sign up new staff (this will switch the session)
       const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-        email,
-        password,
-        options: { data: { full_name: name } },
+        email, password, options: { data: { full_name: name } },
       });
-
       if (signUpError) throw signUpError;
       if (!signUpData.user) throw new Error("Failed to create user");
 
-      // Step 3: Immediately restore admin session BEFORE any DB calls
+      // Restore admin session immediately to insert role
       await supabase.auth.setSession({
-        access_token: adminAccessToken,
-        refresh_token: adminRefreshToken,
+        access_token: adminSession.access_token,
+        refresh_token: adminSession.refresh_token,
       });
 
-      // Step 4: Insert role (now running as admin again)
       const { error: roleError } = await supabase
         .from("user_roles")
         .insert({ user_id: signUpData.user.id, role: role as "admin" | "staff" });
-
       if (roleError) throw roleError;
 
-      toast.success(`${name} added successfully!`);
+      // Save info for the dialog
+      setPendingStaff({
+        name, email, password,
+        adminAccessToken: adminSession.access_token,
+        adminRefreshToken: adminSession.refresh_token,
+      });
+      setDialogOpen(true);
       setName(""); setEmail(""); setPassword(""); setRole("staff");
-      fetchStaff();
-
     } catch (err: any) {
       toast.error("Failed to add staff: " + err.message);
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const handlePreviewAccess = async () => {
+    if (!pendingStaff) return;
+    setDialogOpen(false);
+    const { error } = await supabase.auth.signInWithPassword({
+      email: pendingStaff.email, password: pendingStaff.password,
+    });
+    if (error) { toast.error("Could not sign in as staff: " + error.message); return; }
+    toast.success(`Signed in as ${pendingStaff.name}`);
+    setPendingStaff(null);
+    navigate("/scan");
+  };
+
+  const handleStayAsAdmin = async () => {
+    if (!pendingStaff) return;
+    setDialogOpen(false);
+    await supabase.auth.setSession({
+      access_token: pendingStaff.adminAccessToken,
+      refresh_token: pendingStaff.adminRefreshToken,
+    });
+    toast.success(`${pendingStaff.name} added successfully!`);
+    setPendingStaff(null);
+    fetchStaff();
   };
 
   const handleDelete = async (id: string, memberName: string) => {
@@ -117,23 +138,17 @@ export default function ManageStaff() {
       await supabase.from("profiles").delete().eq("id", id);
       toast.success("Staff member removed");
       fetchStaff();
-    } catch (err: any) {
-      toast.error(err.message);
-    }
+    } catch (err: any) { toast.error(err.message); }
   };
 
   const handleRoleChange = async (userId: string, newRole: string) => {
     try {
       await supabase.from("user_roles").delete().eq("user_id", userId);
-      const { error } = await supabase
-        .from("user_roles")
-        .insert({ user_id: userId, role: newRole as "admin" | "staff" });
+      const { error } = await supabase.from("user_roles").insert({ user_id: userId, role: newRole as "admin" | "staff" });
       if (error) throw error;
       toast.success("Role updated");
       fetchStaff();
-    } catch (err: any) {
-      toast.error(err.message);
-    }
+    } catch (err: any) { toast.error(err.message); }
   };
 
   return (
@@ -190,31 +205,19 @@ export default function ManageStaff() {
           </thead>
           <tbody>
             {loading ? (
-              <tr>
-                <td colSpan={4} className="p-8 text-center text-muted-foreground">
-                  Loading...
-                </td>
-              </tr>
+              <tr><td colSpan={4} className="p-8 text-center text-muted-foreground">Loading...</td></tr>
             ) : staff.length === 0 ? (
-              <tr>
-                <td colSpan={4} className="p-8 text-center text-muted-foreground">
-                  No staff members yet. Add your first staff member above.
-                </td>
-              </tr>
+              <tr><td colSpan={4} className="p-8 text-center text-muted-foreground">No staff members yet.</td></tr>
             ) : staff.map((s) => (
               <tr key={s.id} className="border-t hover:bg-muted/50 transition-colors">
                 <td className="p-3 font-medium">{s.full_name || "—"}</td>
                 <td className="p-3 text-muted-foreground">{s.email}</td>
                 <td className="p-3">
                   {s.id === user?.id ? (
-                    <Badge variant="default" className="gap-1">
-                      <Shield className="h-3 w-3" /> {s.role}
-                    </Badge>
+                    <Badge variant="default" className="gap-1"><Shield className="h-3 w-3" /> {s.role}</Badge>
                   ) : (
                     <Select value={s.role} onValueChange={(v) => handleRoleChange(s.id, v)}>
-                      <SelectTrigger className="h-8 w-28">
-                        <SelectValue />
-                      </SelectTrigger>
+                      <SelectTrigger className="h-8 w-28"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="staff">Staff</SelectItem>
                         <SelectItem value="admin">Admin</SelectItem>
@@ -224,11 +227,7 @@ export default function ManageStaff() {
                 </td>
                 <td className="p-3 text-right">
                   {s.id !== user?.id && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => handleDelete(s.id, s.full_name || s.email)}
-                    >
+                    <Button variant="ghost" size="icon" onClick={() => handleDelete(s.id, s.full_name || s.email)}>
                       <Trash2 className="h-4 w-4 text-destructive" />
                     </Button>
                   )}
@@ -238,6 +237,25 @@ export default function ManageStaff() {
           </tbody>
         </table>
       </div>
+
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Staff Member Created</DialogTitle>
+            <DialogDescription>
+              Staff member <span className="font-semibold text-foreground">{pendingStaff?.name}</span> added successfully! Would you like to preview their access to verify their permissions?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex gap-2 sm:gap-0">
+            <Button variant="outline" onClick={handlePreviewAccess} className="gap-2">
+              <Eye className="h-4 w-4" /> Preview Access
+            </Button>
+            <Button onClick={handleStayAsAdmin} className="gap-2">
+              <ShieldCheck className="h-4 w-4" /> Stay as Admin
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
