@@ -1,6 +1,5 @@
-import { LayoutDashboard, Package, PlusCircle, Barcode, ScanLine, Users, LogOut } from "lucide-react";
+import { LayoutDashboard, Package, PlusCircle, Barcode, ScanLine, Users, LogOut, Activity } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
-import { useLocation } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -17,6 +16,7 @@ const adminItems = [
   { title: "Add Product", url: "/products/new", icon: PlusCircle },
   { title: "Barcode Generator", url: "/barcode", icon: Barcode },
   { title: "Scan Product", url: "/scan", icon: ScanLine },
+  { title: "Staff Activity", url: "/activity", icon: Activity },
   { title: "Manage Staff", url: "/staff", icon: Users },
 ];
 
@@ -29,7 +29,6 @@ const staffItems = [
 export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
-  const location = useLocation();
   const { profile, role, signOut, isAdmin } = useAuth();
   const items = isAdmin ? adminItems : staffItems;
 

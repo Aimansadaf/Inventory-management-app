@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, useRef, ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { User, Session } from "@supabase/supabase-js";
 
@@ -13,6 +13,7 @@ interface AuthState {
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
   isAdmin: boolean;
+  isCreatingStaff: React.MutableRefObject<boolean>;
 }
 
 const AuthContext = createContext<AuthState | undefined>(undefined);
@@ -23,6 +24,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [role, setRole] = useState<AppRole | null>(null);
   const [profile, setProfile] = useState<{ email: string; full_name: string } | null>(null);
   const [loading, setLoading] = useState(true);
+  const isCreatingStaff = useRef(false);
 
   const fetchUserData = async (userId: string) => {
     try {
@@ -32,7 +34,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       ]);
       if (profileRes.data) setProfile(profileRes.data);
       if (roleRes.data) setRole(roleRes.data.role as AppRole);
-      else setRole("staff"); // default role
+      else setRole("staff");
     } catch {
       setRole("staff");
     }
@@ -41,10 +43,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (_event, session) => {
+        // CRITICAL: ignore auth changes during staff creation
+        if (isCreatingStaff.current) return;
+
         setSession(session);
         setUser(session?.user ?? null);
         if (session?.user) {
-          // Use setTimeout to avoid Supabase deadlock
           setTimeout(() => fetchUserData(session.user.id), 0);
         } else {
           setRole(null);
@@ -90,6 +94,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         signIn,
         signOut,
         isAdmin: role === "admin",
+        isCreatingStaff,
       }}
     >
       {children}

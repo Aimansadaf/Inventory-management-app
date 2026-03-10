@@ -12,6 +12,7 @@ import ProductForm from "@/pages/ProductForm";
 import BarcodePage from "@/pages/BarcodePage";
 import ScanPage from "@/pages/ScanPage";
 import ManageStaff from "@/pages/ManageStaff";
+import StaffActivity from "@/pages/StaffActivity";
 import LoginPage from "@/pages/LoginPage";
 import NotFound from "@/pages/NotFound";
 
@@ -33,6 +34,7 @@ const App = () => (
               <Route path="/products/edit/:id" element={<ProtectedRoute adminOnly><ProductForm /></ProtectedRoute>} />
               <Route path="/barcode" element={<BarcodePage />} />
               <Route path="/scan" element={<ScanPage />} />
+              <Route path="/activity" element={<ProtectedRoute adminOnly><StaffActivity /></ProtectedRoute>} />
               <Route path="/staff" element={<ProtectedRoute adminOnly><ManageStaff /></ProtectedRoute>} />
             </Route>
             <Route path="*" element={<NotFound />} />
